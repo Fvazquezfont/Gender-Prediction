@@ -1,0 +1,152 @@
+# =====================================================
+# Introduction to Machine Learning - Gender Prediction
+# =====================================================
+# Autor: team9
+# Archivo final: teamX_test1.ipynb
+
+# ==============================
+# 1. Importar librerías necesarias
+# ==============================
+import pandas as pd
+import numpy as np
+
+# Para dividir dataset en entrenamiento y prueba
+#      from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
+
+# Para transformar variables categóricas en numéricas
+#     from sklearn.preprocessing import LabelEncoder
+
+# Algoritmos de clasificación
+#     from sklearn.linear_model import LogisticRegression
+#     from sklearn.ensemble import RandomForestClassifier
+#     from sklearn.svm import SVC
+
+# Para evaluar el rendimiento
+#     from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+
+
+# ==============================
+# 2. Cargar datasets de nombres
+# ==============================
+# Los datasets están separados en hombres y mujeres
+female_names = pd.read_csv("female_spanish_names_reduced.csv")
+male_names = pd.read_csv("male_spanish_names_reduced.csv")
+
+# Añadimos la columna Gender: 0 = mujer, 1 = hombre
+female_names["Gender"] = 0
+male_names["Gender"] = 1
+
+# Unimos ambos datasets
+data = pd.concat([female_names, male_names], ignore_index=True)
+
+# Renombramos la columna de nombres a "Name" si es necesario
+if "Name" not in data.columns:
+    data.rename(columns={data.columns[0]: "Name"}, inplace=True)
+
+print("Dataset combinado:")
+print(data.head())
+
+# ==============================
+# 3. Ingeniería de características (Feature Engineering)
+# ==============================
+# Función para extraer características de los nombres
+def extract_features(df):
+    features = pd.DataFrame()
+
+    # Pasamos todos los nombres a minúsculas para mayor consistencia
+    names = df["Name"].str.lower()
+
+    # Longitud del nombre
+    features["length"] = names.str.len()
+
+    # Última letra
+    features["last_letter"] = names.str[-1]
+
+    # Primera letra
+    features["first_letter"] = names.str[0]
+
+    # ¿Termina en vocal? (booleano 0/1)
+    features["ends_with_vowel"] = names.str[-1].isin(list("aeiou")).astype(int)
+
+    # Codificamos letras (variables categóricas → numéricas)
+    le_first = LabelEncoder()
+    le_last = LabelEncoder()
+
+    features["first_letter"] = le_first.fit_transform(features["first_letter"])
+    features["last_letter"] = le_last.fit_transform(features["last_letter"])
+
+    return features
+
+# Creamos X (features) e y (target)
+X = extract_features(data)
+y = data["Gender"]
+
+print("Características generadas:")
+print(X.head())
+
+
+# ==============================
+# 4. Dividir en train y test
+# ==============================
+X_train, X_val, y_train, y_val = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+
+
+# ==============================
+# 5. Entrenar modelos
+# ==============================
+# Probaremos con varios clasificadores
+
+models = {
+    "Logistic Regression": LogisticRegression(max_iter=1000),
+    "Random Forest": RandomForestClassifier(n_estimators=100, random_state=42),
+    "SVM": SVC(kernel="linear", probability=True, random_state=42),
+}
+
+results = {}
+
+for name, model in models.items():
+    model.fit(X_train, y_train)  # Entrenar modelo
+    y_pred = model.predict(X_val)  # Predicciones
+    acc = accuracy_score(y_val, y_pred)  # Calcular accuracy
+    results[name] = acc
+    print(f"\nModelo: {name}")
+    print(f"Accuracy en validación: {acc:.4f}")
+    print(classification_report(y_val, y_pred))
+
+
+# ==============================
+# 6. Seleccionar mejor modelo
+# ==============================
+best_model_name = max(results, key=results.get)
+best_model = models[best_model_name]
+print(f"\n➡️ Mejor modelo: {best_model_name} con accuracy {results[best_model_name]:.4f}")
+
+
+# ==============================
+# 7. Función para test externo
+# ==============================
+def evaluate_on_test(test_csv, model):
+    """
+    Carga un dataset de test, extrae features, predice y devuelve accuracy
+    """
+    test_data = pd.read_csv(test_csv)
+
+    # Separar X_test (nombres) e y_test (género real)
+    X_test = extract_features(test_data)
+    y_test = test_data["Gender"]
+
+    # Predicciones
+    y_pred = model.predict(X_test)
+
+    # Accuracy
+    acc = accuracy_score(y_test, y_pred)
+    print("\n===== RESULTADOS EN TEST =====")
+    print(f"Accuracy en test: {acc:.4f}")
+    print(confusion_matrix(y_test, y_pred))
+    return acc
+
+
+# Ejemplo de uso (cuando el profe te dé el archivo test_dataset.csv):
+# evaluate_on_test("test_dataset.csv", best_model)
